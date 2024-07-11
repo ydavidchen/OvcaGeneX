@@ -18,7 +18,7 @@ load_clin_hgssoc <- function(prim_key="bcr_sample_barcode", sec_key="bcr_patient
   colnames(liu2018)[colnames(liu2018)=="age_at_initial_pathologic_diagnosis"] <- "AgeAtDx"
   colnames(liu2018)[colnames(liu2018)=="histological_grade"] <- "Grade"
   liu2018$raceWhite <- liu2018$race == "WHITE"
-  liu2018 <- liu2018[ , c(sec_key,"AgeAtDx","Grade","raceWhite","OS.time","OS","PFI","PFI.time")]
+  liu2018 <- liu2018[ , c(sec_key,"AgeAtDx","Grade","raceWhite","tumor_status","OS.time","OS","PFI","PFI.time")]
   
   ## GDAC FireBrowse w/ additional covariates:
   gdac <- read.csv(paste0(DIR, "SynapseTCGAlive/OV/gdac_firebrowse_ov_cleaned.csv"))
@@ -50,9 +50,8 @@ clin_tcga <- load_clin_hgssoc()
 cts <- read.csv(paste0(DIR,"SynapseTCGAlive/OV/unc.edu_OV_IlluminaHiSeq_RNASeqV2.geneExp.tsv"), sep="\t", check.names=FALSE)
 cts$gene_id <- gsub("\\|.*", "", cts$gene_id)
 
-
 cts <- subset(cts, gene_id %in% COMMON_GENES)
-sum(duplicated(cts$gene_id))
+sum(duplicated(cts$gene_id)) #1
 
 cts <- aggregate(. ~ gene_id, data=cts, FUN=mean, na.rm=TRUE)
 rownames(cts) <- cts$gene_id
@@ -73,6 +72,10 @@ cl_tcga <- stratify_by_gene(cts, GENE, "bcr_sample_barcode")
 clin_tcga <- merge(clin_tcga, cl_tcga, by="bcr_sample_barcode")
 rownames(clin_tcga) <- NULL
 
+LEV <- c("High","Low")
+clin_tcga$Group0 <- factor(clin_tcga$Group0, levels=LEV)
+clin_tcga$GroupM <- factor(clin_tcga$GroupM, levels=LEV)
+
 cts <- cts[rownames(cts)!= GENE, ]
 
 # ---------------------------- Export ----------------------------
@@ -82,16 +85,19 @@ expr_tcga <- t(expr_tcga)
 sum(is.na(expr_tcga))
 hist(expr_tcga)
 
-# save(
-#   list = c("expr_tcga", "clin_tcga"),
-#   file = paste0(DIR_OUT, "240504a_tcgaov.RData"),
-#   compress = TRUE
-# )
+expr_tcga <- winsorize(expr_tcga, -6, 6)
+
+save(
+  list = c("expr_tcga", "clin_tcga"),
+  file = paste0(DIR_OUT, "240504a_tcgaov.RData"),
+  compress = TRUE
+)
 
 ## 2. Export raw counts:
-# write.table(cts, paste0(DIR_OUT,"240505a_hugo_counts_tcga.tsv"), sep="\t", row.names=TRUE, quote=FALSE)
+write.table(cts, paste0(DIR_OUT,"240505a_hugo_counts_tcga.tsv"), sep="\t", row.names=TRUE, col.names=NA, quote=FALSE)
 
 ## 3. Export log2 counts:
 cts <- log2(cts + 1)
 hist(cts)
-# write.table(cts, paste0(DIR_OUT,"240505a_hugo_log2_expr_tcga.tsv"), sep="\t", row.names=TRUE, quote=FALSE)
+
+write.table(cts, paste0(DIR_OUT,"240505a_hugo_log2_expr_tcga.tsv"), sep="\t", row.names=TRUE, col.names=NA, quote=FALSE)

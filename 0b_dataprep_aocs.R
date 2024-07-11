@@ -32,13 +32,15 @@ samps_mocog <- samps_mocog[ , COL_SAMPS]
 # ---------------------------- Load & Clean Patient Metadata ----------------------------
 load_aus_clinical <- function(path=paste0(DIR,PATH_AUS,"clinical_sele.xlsx")) {
   ## Clinical data:
-  clin <- read_excel(path, sheet=1, trim_ws=TRUE, na=STRNAS)
+  clin <- read_excel(path, sheet=1, trim_ws=TRUE, na=c(STRNAS,"Nil","Not known","Size unknown"))
   clin <- as.data.frame(clin)
   colnames(clin)[1] <- "patient"
-  colnames(clin)[colnames(clin)=="FIGO stage"] <- "simple_stage"
-  clin$simple_stage[clin$simple_stage=="IIIC"] <- "III"
+  
+  clin <- subset(clin, ! is.na(Grade))
   clin$Grade <- paste0("G", clin$Grade)
-  clin$Grade[clin$Grade=="GNA"] <- NA
+  
+  clin$simple_stage <- gsub("[A-C]", "", clin$`FIGO stage`)
+  clin <- subset(clin, Neoadjuvant=="No")
   
   ## Molecular annotation:
   molec <- read_excel(path, sheet=2, trim_ws=TRUE, na=STRNAS)
@@ -52,8 +54,6 @@ load_aus_clinical <- function(path=paste0(DIR,PATH_AUS,"clinical_sele.xlsx")) {
   
   ## Outer Join:
   df <- merge(clin, molec, by="patient")
-  # df$patient <- gsub("-", "_", df$patient)
-  # df$Sample_ID <- gsub("-", "_", df$Sample_ID)
   return(df)
   
 }
@@ -82,7 +82,6 @@ samps_aus <- rbind(samps_aocs, samps_mocog)
 clin_aus <- merge(samps_aus, clin_aus, by.x="case_id", by.y="patient", all.x=TRUE)
 cts <- cbind(eAOCS, eMOCOG)
 stopifnot( identical(colnames(cts), clin_aus$Sample_title) ) #important checkpoint
-# colnames(cts) <- clin_aus$Accession
 rm(samps_aocs, samps_mocog, samps_aus, eAOCS, eMOCOG)
 
 ## Gene annotation:
@@ -90,19 +89,24 @@ cts$GeneID <- gsub("\\|.*", "", rownames(cts))
 ENSEMBL <- read.csv(paste0(DIR, PATH_AUS,"ensembl_dict_GSE211669_column1.csv"))
 stopifnot(identical(cts$GeneID, ENSEMBL$ensembl)) #checkpoint
 cts$GeneID <- ENSEMBL$HUGO
+rm(ENSEMBL)
 
 cts <- subset(cts, GeneID %in% COMMON_GENES)
 
 ## Handle duplicate HUGO symbols:
-sum(duplicated((cts$GeneID))) #367
-cts <- aggregate(. ~ GeneID, data=cts, FUN=mean, na.rm=TRUE) 
+sum(duplicated((cts$GeneID))) #70
+cts <- aggregate(. ~ GeneID, data=cts, FUN=mean, na.rm=TRUE)
 rownames(cts) <- cts$GeneID
 cts$GeneID <- NULL
 cts <- data.matrix(cts)
 
 # ---------------------------- Update Clinical Data w/ Gene Strata ----------------------------
-cl_aus <- stratify_by_gene(cts, GENE, "Accession")
-clin_aus <- merge(clin_aus, cl_aus, by="Accession")
+cl_aus <- stratify_by_gene(cts, GENE, "Sample_title")
+clin_aus <- merge(clin_aus, cl_aus, by="Sample_title")
+
+LEV <- c("High", "Low")
+clin_aus$Group0 <- factor(clin_aus$Group0, levels=LEV)
+clin_aus$GroupM <- factor(clin_aus$GroupM, levels=LEV)
 
 cts <- cts[rownames(cts)!= GENE, ]
 
@@ -113,16 +117,18 @@ expr_aus <- t(expr_aus)
 sum(is.na(expr_aus))
 hist(expr_aus)
 
-# save(
-#   list = c("expr_aus","clin_aus"),
-#   file = paste0(DIR_OUT, "240504b_aocs_mocog.RData"),
-#   compress = TRUE
-# )
+expr_aus <- winsorize(expr_aus, -6, 6)
+
+save(
+  list = c("expr_aus","clin_aus"),
+  file = paste0(DIR_OUT, "240504b_aocs_mocog.RData"),
+  compress = TRUE
+)
 
 ## 2. Export raw counts:
-# write.table(cts, paste0(DIR_OUT,"240505b_hugo_expr_counts_aocs.tsv"), sep="\t", row.names=TRUE, quote=FALSE)
+write.table(cts, paste0(DIR_OUT,"240505b_hugo_expr_counts_aocs.tsv"), sep="\t", row.names=TRUE, col.names=NA, quote=FALSE)
 
 ## 3. Export log2 counts:
 cts <- log2(cts + 1)
 hist(cts)
-# write.table(cts, paste0(DIR_OUT,"240505b_hugo_expr_log2count_aocs.tsv"), sep="\t", row.names=TRUE, quote=FALSE)
+write.table(cts, paste0(DIR_OUT,"240505b_hugo_expr_log2count_aocs.tsv"), sep="\t", row.names=TRUE, col.names=NA, quote=FALSE)
