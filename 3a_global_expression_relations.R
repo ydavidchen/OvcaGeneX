@@ -1,6 +1,5 @@
-# Global Expression by PCA
+# Expression Groups vs. Global Expression Summaries
 # Notes:
-# - Objective: Investigate relationship btwn Groups vs. global expression summaries
 
 rm(list=ls())
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
@@ -11,6 +10,10 @@ PROP_SELE <- 0.75 #most variable genes to keep in each cohort
 
 load(paste0(DIR_OUT,"240504a_tcgaov.RData"))
 load(paste0(DIR_OUT, "240504b_aocs_mocog.RData"))
+
+## Data leakage checkpoints:
+stopifnot(! GENE %in% rownames(expr_tcga))
+stopifnot(! GENE %in% rownames(expr_aus))
 
 ## Keep shared most variable genes:
 expr_tcga <- select_most_var(expr_tcga, PROP_SELE)
@@ -23,7 +26,7 @@ length(gShared) / nrow(expr_tcga) #0.8527884
 expr_tcga <- expr_tcga[gShared, ]
 expr_aus <- expr_aus[gShared, ]
 
-## PCA:
+## Consistently execute PCA procedure:
 wrapper_pca <- function(mat, clin=NULL, prim_key=NULL) {
   #'@description Wrapper to systematically run 2-dimensional PCA & downstream stats
   #'@param mat Expression matrix w/ standard format, i.e. row=genes

@@ -1,9 +1,13 @@
 # Exploration / Visualization: Co-expression w/ Candidate Genes
+# Notes:
+# - This script is for convenient interactive EDA (for discovery purposes) only. Not for final pub
 
 rm(list=ls())
 setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
 source("utils.R")
 library(ggplot2)
+
+CANDIDATES <- "YOUR GENES HERE in format c(<gene1>,...,<genek>)"
 
 eda_wrapper <- function(mat, clin, prim_key, g, testByGroup=FALSE) {
   if(g %in% rownames(mat)) {
@@ -31,8 +35,6 @@ eda_wrapper <- function(mat, clin, prim_key, g, testByGroup=FALSE) {
     paste(g, "NOT available!")
 }
 
-CANDIDATES <- c("PARP1","MKI67")
-
 # ------------------------------ TCGA ------------------------------
 load(paste0(DIR_OUT,"240504a_tcgaov.RData"))
 expr_tcga <- winsorize(expr_tcga, -5, 5)
@@ -44,4 +46,3 @@ load(paste0(DIR_OUT, "240504b_aocs_mocog.RData"))
 expr_aus <- winsorize(expr_aus, -5, 5)
 
 for(g in CANDIDATES) eda_wrapper(expr_aus, clin_aus, "Sample_title", g, TRUE)
-
