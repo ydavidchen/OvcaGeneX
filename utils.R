@@ -6,19 +6,30 @@ library(ggplot2)
 
 ## Paths ***** MASKED *****:
 DIR <- "***** MASKED *****"
-DIR_OUT <-  "***** MASKED *****"
-PATH_AUS <-  "***** MASKED *****"
+DIR_OUT <- "***** MASKED *****"
+PATH_AUS <- "***** MASKED *****"
+PATH_CSC <- "***** MASKED *****"
 
-GENE <-  "***** MASKED *****"
-ENTREZ <-  "***** MASKED *****" #ncbi.nlm.nih.gov/gene/
-HG19_COORDS <-  "***** MASKED *****"
+GENE <- "***** MASKED *****"
+ENTREZ <- "***** MASKED *****" #ncbi.nlm.nih.gov/gene/
+HG19_COORDS <- "***** MASKED *****"
+GFAM <- c("***** MASKED *****")
 
 STRNAS <- c("", "NA", "n/a", "NaN")
+CHROMS <- 1:22
 CL_PARAMS <- c("ward.D", "euclidean")
 ADMIN_CENSOR <- 36 #mo
 DAYSPERMO <- 30.437 #conversion factor
 
-## Stats methods:
+## Helper methods:
+StandardScale <- function(vec) {
+  #'@usage Use directly or as callback: apply(<df>, <margin>, FUN=StandardScale)
+  sig <- sd(vec, na.rm=TRUE)
+  if(sig == 0) return(vec)
+  mu <- mean(vec, na.rm=TRUE)
+  return((vec-mu) / sig)
+}
+
 MinMaxScale <- function(vec) {
   xmin <- min(vec, na.rm=TRUE)
   xmax <- max(vec, na.rm=TRUE)
@@ -26,17 +37,16 @@ MinMaxScale <- function(vec) {
   return((vec- xmin)/(xmax-xmin))
 }
 
-undoMinimax <- function(x, mRef) return( (x - min(mRef)) / (max(mRef)-min(mRef)) )
-
-StandardScale <- function(vec) {
-  #'@usage apply(<df>, <margin>, FUN=StandardScale)
-  sig <- sd(vec, na.rm=TRUE)
-  if(sig == 0) return(vec)
-  mu <- mean(vec, na.rm=TRUE)
-  return((vec-mu) / sig)
+SelectMostVar <- function(mat, size) {
+  #'@param size Number or proportion to select
+  if(size < 1) size <- as.integer(nrow(mat) * size)
+  sele <- order(matrixStats::rowVars(mat), decreasing=TRUE)[1:size]
+  return(mat[sele, ])
 }
 
 drop_flat_vals <- function(mat, val=0) return(mat[rowSums(mat==val) < ncol(mat), ])
+
+drop_uniform_var <- function(mat) mat[matrixStats::rowVars(mat) > 0, ]
 
 winsorize <- function(mat, lower=NA, upper=NA) {
   #'@description Constrains extreme values in matrix `mat`
@@ -46,19 +56,9 @@ winsorize <- function(mat, lower=NA, upper=NA) {
   return(mat)
 }
 
-## Shared Wrappers:
-stratify_by_gene <- function(expr, geneName, idcol="sample") {
-  #'@description Wrapper to stratify population by a gene at median & at scaled 0
-  #'@param expr Matrix of gene un-scaled counts
-  #'@param geneName HUGO gene name
-  #'@param idCol Sample name to use in resultant dataframe
-  df <- as.data.frame(expr[geneName, ])
-  colnames(df) <- "mRNA"
-  df["GroupM"] <- as.numeric(df[,"mRNA"]) > median(df[,"mRNA"], na.rm=TRUE)
-  df["Group0"] <- StandardScale(df[,"mRNA"]) > 0
-  df[idcol] <- rownames(df)
-  rownames(df) <- NULL
-  return(df[ , c(idcol,"mRNA","Group0","GroupM")])
+build_gene_gr <- function(chr, start, end) {
+  gr <- GenomicRanges::GRanges(chr, IRanges::IRanges(start=start, end=end))
+  return(gr)
 }
 
 ## Data Visualization:
@@ -75,7 +75,7 @@ THEME_SCATTER <- theme_gray() +
         legend.position="top", legend.text=element_text(size=10,color="black"))
 
 THEME_BOX <- theme_bw() +
-  theme(axis.text.x=element_text(size=10,color="black", angle=90), axis.text.y=element_text(size=15,color="black"),
+  theme(axis.text.x=element_text(size=12,color="black"), axis.text.y=element_text(size=15,color="black"),
         axis.title.x=element_blank(), axis.title.y=element_text(size=15,color="black"),
         strip.text.x=element_text(size=15,color="black",face="bold"), strip.background=element_rect(fill="gray95"),
         panel.border = element_blank(), axis.line=element_line(color="black"),
